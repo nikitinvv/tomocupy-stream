@@ -15,7 +15,7 @@ args.ncz = 8 # chunk size (multiple of 2)
 args.ndark = 10 # number of dark fields
 args.nflat = 10 # number of flat fields
 args.in_dtype = 'uint8' # input data type
-args.dtype = 'float16' # computation type, note  for float16 n should be a power of 2
+args.dtype = 'float32' # computation type, note  for float16 n should be a power of 2
 args.reconstruction_algorithm = 'fourierrec' # fourierrec, lprec, or linerec
 
 args.dezinger = 0 # zinger size (0 - no zingers)
