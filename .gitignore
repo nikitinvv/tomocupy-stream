@@ -1,0 +1,164 @@
+# temporary config file for build
+config/Mk.config
+
+# Compiled source #
+###################
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+*.dylib
+
+# Packages #
+############
+# it's better to unpack these files and commit the raw source
+# git has its own built in compression methods
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+*.egg
+*.egg-info
+dist
+share
+build
+_skbuild
+_cmake_test_compile
+/build-*
+.eggs
+parts
+var
+sdist
+develop-eggs
+.installed.cfg
+__pycache__
+
+# Logs and databases #
+######################
+*.log
+*.sql
+*.sqlite
+/.docker/pgilinux-*
+
+# OS generated files #
+######################
+core
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.spyderworkspace
+*.*~
+
+# Python byproducts #
+#####################
+*.pyc
+build
+dist
+docs/_build
+*egg-info
+.settings
+pip-log.txt
+.ipynb_checkpoints
+/tomopy/allocator/__init__.py
+
+# Other byproducts #
+####################
+.idea
+.project
+.spyderproject
+.pydevproject
+
+# LaTex generated files #
+#########################
+*.aux
+*.cls
+*.layout
+*.bst
+
+# Test files #
+##############
+tmp
+test.py
+main.py
+*.ipynb
+trunk
+/test/*.jpeg
+
+# Installer logs
+##############
+pip-log.txt
+
+# Unit test / coverage reports #
+################################
+.coverage
+.coverage.xml
+.tox
+nosetests.xml
+
+# Translations #
+################
+*.mo
+
+# Mercurial #
+#############
+.hg
+
+# Mr Developer #
+################
+.mr.developer.cfg
+.project
+.pydevproject
+.idea
+.vscode
+/CMakeLists.txt.user*
+
+# Private functions #
+#####################
+script
+*.autotools
+*.cproject
+
+# Benchmarking #
+################
+/Build.cmake
+/CTestConfig.cmake
+/CTestCustom.cmake
+/CTestTestfile.cmake
+/Coverage.cmake
+/DartConfiguration.tcl
+/Glob.cmake
+/Init.cmake
+/Makefile
+/MemCheck.cmake
+/Stages.cmake
+/Submit.cmake
+/Test.cmake
+/Testing
+/Utilities.cmake
+/cmake_install.cmake
+*.gcov
+*.gcda
+*.gcno
+/coverage.xml
+/.coverage.xml
+/CMakeFiles
+/test_rotate.py
+/tests/data_rec
+/tests/out.txt
+
+#
+*.jpg
+.loglogin
+*.png
+*.tiff
+*.npy

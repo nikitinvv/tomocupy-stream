@@ -2,8 +2,7 @@
 Tomocupy_stream
 ========
 
-**Tomocupy_stream** is a Python package and a command-line interface for GPU reconstruction of tomographic/laminographic data in 16-bit and 32-bit precision. All preprocessing operations are implemented on GPU with using CuPy library, the backprojection operation is implemented with CUDA C.
+**Tomocupy_stream** is a Python package for GPU reconstruction of tomographic data in 16-bit and 32-bit precision. All preprocessing operations are implemented on GPU with using CuPy library, the backprojection operation is implemented with CUDA C.
 
 
-**Tomocupy_stream**  documentation is available `here <https://tomocupy_stream.readthedocs.io/en/latest/>`_.
 
