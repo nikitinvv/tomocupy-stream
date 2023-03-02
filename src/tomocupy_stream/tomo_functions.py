@@ -40,7 +40,7 @@
 
 from tomocupy_stream import fourierrec
 from tomocupy_stream import lprec
-from tomocupy_stream import fbp_filter
+from tomocupy_stream import fbp_filter as fbp_filter_module
 from tomocupy_stream import linerec
 from tomocupy_stream import remove_stripe
 import cupyx.scipy.ndimage as ndimage
@@ -51,33 +51,64 @@ import numpy as np
 
 
 class TomoFunctions():
-    def __init__(self, args, theta):
-        self.args = args
-        self.n = args.n
-        self.ncz = args.ncz
-        self.nproj = args.nproj
+    def __init__(
+        self,
+        *,
+        n,
+        nproj,
+        ncz,
+        dtype,
+        rotation_axis,
+        reconstruction_algorithm,
+        remove_stripe_method,
+        fw_sigma,
+        fw_filter,
+        fw_level,
+        ti_beta,
+        ti_mask,
+        dezinger,
+        dezinger_threshold,
+        fbp_filter,
+        theta,
+    ):
+        self.n = n
+        self.nproj = nproj
+        self.ncz = ncz
+        self.dtype = dtype
+        self.rotation_axis = rotation_axis
+        self.reconstruction_algorithm = reconstruction_algorithm
+        self.remove_stripe_method = remove_stripe_method
+        self.fw_sigma = fw_sigma
+        self.fw_filter = fw_filter
+        self.fw_level = fw_level
+        self.ti_beta = ti_beta
+        self.ti_mask = ti_mask
+        self.dezinger = dezinger
+        self.dezinger_threshold = dezinger_threshold
+        self.fbp_filter = fbp_filter
+        self.theta = theta
         
         # padded size for filtering
         self.ne = 3*self.n//2
-        if self.args.dtype == 'float16':
+        if self.dtype == 'float16':
             # power of 2 for float16
             self.ne = 2**int(np.ceil(np.log2(3*self.n//2)))
         
         # filter class
-        self.cl_filter = fbp_filter.FBPFilter(
-            self.ne, self.nproj, self.ncz, self.args.dtype)
+        self.cl_filter = fbp_filter_module.FBPFilter(
+            self.ne, self.nproj, self.ncz, self.dtype)
         theta = cp.array(theta)/180*cp.pi
         # backprojection class
-        if self.args.reconstruction_algorithm == 'fourierrec':
+        if self.reconstruction_algorithm == 'fourierrec':
             self.cl_rec = fourierrec.FourierRec(
-                self.n, self.nproj, self.ncz, theta, self.args.dtype)
-        elif self.args.reconstruction_algorithm == 'lprec':
-            self.args.rotation_axis += 0.5
+                self.n, self.nproj, self.ncz, theta, self.dtype)
+        elif self.reconstruction_algorithm == 'lprec':
+            self.rotation_axis += 0.5
             self.cl_rec = lprec.LpRec(
-                self.n, self.nproj, self.ncz, theta, self.args.dtype)
-        elif self.args.reconstruction_algorithm == 'linerec':
+                self.n, self.nproj, self.ncz, theta, self.dtype)
+        elif self.reconstruction_algorithm == 'linerec':
             self.cl_rec = linerec.LineRec(
-                theta, self.nproj, self.nproj, self.ncz, self.ncz, self.n, self.args.dtype)
+                theta, self.nproj, self.nproj, self.ncz, self.ncz, self.n, self.dtype)
     
     def rec(self, result, data, dark, flat):
         """Processing a sinogram data chunk"""
@@ -86,12 +117,12 @@ class TomoFunctions():
         self._remove_outliers(dark)
         self._remove_outliers(flat)        
         tmp = self._darkflat_correction(data, dark, flat) # new memory -> tmp
-        if self.args.remove_stripe_method == 'fw':
+        if self.remove_stripe_method == 'fw':
             remove_stripe.remove_stripe_fw(
-                tmp, self.args.fw_sigma, self.args.fw_filter, self.args.fw_level)        
-        elif self.args.remove_stripe_method == 'ti':
+                tmp, self.fw_sigma, self.fw_filter, self.fw_level)        
+        elif self.remove_stripe_method == 'ti':
             remove_stripe.remove_stripe_ti(
-                tmp, self.args.ti_beta,self.args.ti_mask)
+                tmp, self.ti_beta,self.ti_mask)
             
         self._minus_log(tmp)        
         self._fbp_filter_center(tmp)        
@@ -100,11 +131,11 @@ class TomoFunctions():
     def _darkflat_correction(self, data, dark, flat):
         """Dark-flat field correction"""
 
-        dark0 = dark.astype(self.args.dtype, copy=False)
-        flat0 = flat.astype(self.args.dtype, copy=False)
+        dark0 = dark.astype(self.dtype, copy=False)
+        flat0 = flat.astype(self.dtype, copy=False)
         flat0 = cp.mean(flat0,axis=0)[:,np.newaxis]
         dark0 = cp.mean(dark0,axis=0)[:,np.newaxis]
-        res = (data.astype(self.args.dtype, copy=False)-dark0) / (flat0-dark0+1e-3)
+        res = (data.astype(self.dtype, copy=False)-dark0) / (flat0-dark0+1e-3)
         res[res <= 0] = 1
         return res
 
@@ -118,25 +149,25 @@ class TomoFunctions():
     def _remove_outliers(self, data):
         """Remove outliers"""
 
-        if(int(self.args.dezinger) > 0):
-            w = int(self.args.dezinger)
+        if(int(self.dezinger) > 0):
+            w = int(self.dezinger)
             if len(data.shape) == 3:
                 fdata = ndimage.median_filter(data, [w, 1, w])
             else:
                 fdata = ndimage.median_filter(data, [w, w])
-            data[:]= cp.where(cp.logical_and(data > fdata, (data - fdata) > self.args.dezinger_threshold), fdata, data)        
+            data[:]= cp.where(cp.logical_and(data > fdata, (data - fdata) > self.dezinger_threshold), fdata, data)        
 
     def _fbp_filter_center(self, data):
         """FBP filtering of projections with applying the rotation center shift wrt to the origin"""
         
         t = cp.fft.rfftfreq(self.ne).astype('float32')
-        if self.args.fbp_filter == 'parzen':
+        if self.fbp_filter == 'parzen':
             w = t * (1 - t * 2)**3
-        elif self.args.fbp_filter == 'shepp':
+        elif self.fbp_filter == 'shepp':
             w = t * cp.sinc(t)
 
         tmp = cp.pad(
             data, ((0, 0), (0, 0), (self.ne//2-self.n//2, self.ne//2-self.n//2)), mode='edge')
-        w = w*cp.exp(-2*cp.pi*1j*t*(-self.args.rotation_axis + self.n/2))  # center fix
+        w = w*cp.exp(-2*cp.pi*1j*t*(-self.rotation_axis + self.n/2))  # center fix
         self.cl_filter.filter(tmp, w, cp.cuda.get_current_stream())
         data[:] = tmp[:, :, self.ne//2-self.n//2:self.ne//2+self.n//2]        
