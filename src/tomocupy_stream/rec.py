@@ -81,8 +81,8 @@ class GPURecRAM:
         """
         return cls(
             n=data.shape[2],
-            nz=data.shape[1],
-            nproj=data.shape[0],
+            nz=data.shape[0],
+            nproj=data.shape[1],
             ncz=ncz,
             ndark=dark.shape[0],
             nflat=flat.shape[0],
@@ -230,6 +230,27 @@ class GPURecRAM:
             self.write_threads.append(utils.WRThread())
         
     def recon_all(self, data, dark, flat, theta, output=None):
+        """
+        Perform correction and reconstruction.
+
+        Parameters
+        ----------
+        data : numpy.array
+            Dimensions (theta, z, x)
+        dark : numpy.array
+            Dimensions (time, z, x)
+        flat : numpy.array
+            Dimensions (time, z, x)
+        theta : numpy.array
+            Dimensions (theta,)
+        output : numpy.array, optional
+            Dimensions (z, x, x). If not given one will be created.
+
+        Returns
+        -------
+        output : numpy.array
+            Dimensions (z, x, x)
+        """
         # Validate that the inputs match what was declared in __init__ and pre-allocated for.
         expected_data_shape = (self.nz, self.nproj, self.n)
         if data.shape != expected_data_shape:
@@ -240,6 +261,9 @@ class GPURecRAM:
         expected_flat_shape = (self.nflat, self.nz, self.n)
         if flat.shape != expected_flat_shape:
             raise ValueError(f"Expected flat.shape {expected_flat_shape}, got {flat.shape}")
+        expected_theta_shape = (self.nproj,)
+        if theta.shape != expected_theta_shape:
+            raise ValueError(f"Expected theta.shape {expected_theta_shape}, got {theta.shape}")
         if output is None:
             # Allocate output array.
             output = np.zeros([self.nz, self.n, self.n], dtype=self.dtype)
