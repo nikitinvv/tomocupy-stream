@@ -1,4 +1,5 @@
 from tomocupy_stream import GPURecRAM
+from tomocupy_stream import find_center
 import numpy as np
 import tifffile
 import time
@@ -19,6 +20,13 @@ dark = np.zeros([ndark, nz, n], dtype=in_dtype)
 flat = np.ones([nflat, nz, n], dtype=in_dtype) + 64
 theta = np.linspace(0, 180, nproj, endpoint=False).astype("float32")
 
+center_search_width = 100
+center_search_step = 0.5
+rotation_axis = find_center.find_center_vo(data[data.shape[0]//2],  
+                                           smin=-center_search_width, 
+                                           smax=center_search_width, 
+                                           step=center_search_step)
+print('auto rotation axis',rotation_axis)
 
 cl = GPURecRAM.for_data_like(
     data=data,

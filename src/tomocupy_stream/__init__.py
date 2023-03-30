@@ -55,3 +55,4 @@ from tomocupy_stream.rec import *
 from tomocupy_stream.remove_stripe import *
 from tomocupy_stream.utils import *
 from tomocupy_stream.tomo_functions import *
+from tomocupy_stream.find_center import *
