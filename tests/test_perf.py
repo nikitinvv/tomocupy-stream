@@ -1,4 +1,5 @@
 from tomocupy_stream import GPURecRAM
+from tomocupy_stream import find_center
 import numpy as np
 import tifffile
 import time
@@ -21,6 +22,17 @@ theta = np.linspace(0,180,nproj,endpoint=False).astype('float32')
 
 # memory for result
 result = np.zeros([nz,n,n],dtype=dtype)
+
+
+center_search_width = 100
+center_search_step = 0.5
+t = time.time()
+rotation_axis = find_center.find_center_vo(data[data.shape[0]//2],  
+                                           smin=-center_search_width, 
+                                           smax=center_search_width, 
+                                           step=center_search_step)
+print(f'Center search time: {time.time()-t}s')
+print('auto rotation axis',rotation_axis)
 
 # create reconstruction class (preallocate memory, init grids for backprojection)
 # can be done once 
@@ -50,7 +62,7 @@ cl = GPURecRAM(
     # ti_mask = 1.0,
 
     fbp_filter = 'parzen',  # filter for fbp
-    rotation_axis = 2048 / 2, # rotation center
+    rotation_axis = rotation_axis, # rotation center
 )
 # run recon
 t = time.time()
