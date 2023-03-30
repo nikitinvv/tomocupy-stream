@@ -11,12 +11,13 @@ with h5py.File('data/test_data.h5', 'r') as fid:
     dark = fid['/exchange/data_dark'][:]
     flat = fid['/exchange/data_white'][:]
     theta = fid['/exchange/theta'][:]
-data = data.swapaxes(0, 1)  # note: sinogram shape
-
+data = data.swapaxes(0,1)  # note: sinogram shape
 
 center_search_width = 100
 center_search_step = 0.5
-rotation_axis = find_center.find_center_vo(data[data.shape[0]//2],  
+center_search_ind = data.shape[0]//2
+rotation_axis = find_center.find_center_vo(data, dark, flat,
+                                           ind=center_search_ind,
                                            smin=-center_search_width, 
                                            smax=center_search_width, 
                                            step=center_search_step)

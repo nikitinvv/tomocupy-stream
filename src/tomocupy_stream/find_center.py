@@ -4,7 +4,8 @@ import cupyx.scipy.ndimage as ndimage
 import logging
 logger = logging.getLogger(__name__)
 
-def find_center_vo(tomo, ind=None, smin=-50, smax=50, srad=6, step=0.25,
+
+def find_center_vo(tomo, dark, flat, ind=None, smin=-50, smax=50, srad=6, step=0.25,
                    ratio=0.5, drop=20):
     """
     Find rotation axis location using Nghia Vo's method. :cite:`Vo:14`.
@@ -33,21 +34,17 @@ def find_center_vo(tomo, ind=None, smin=-50, smax=50, srad=6, step=0.25,
     float
         Rotation axis location.
     """
-    tomo = cp.array(tomo)
-    if tomo.ndim == 2:
-        tomo = cp.expand_dims(tomo, 1)
-        ind = 0
-    (depth, height, width) = tomo.shape
-    if ind is None:
-        ind = height // 2
-        if height > 10:
-            # Averaging sinograms to improve SNR
-            _tomo = cp.mean(tomo[:, ind - 5:ind + 5, :], axis=1)
-        else:
-            _tomo = tomo[:, ind, :]
-    else:
-        _tomo = tomo[:, ind, :]
-
+    
+    
+    _tomo = cp.array(tomo[ind])
+    _dark = cp.mean(cp.array(dark[:,ind]),axis=0)
+    _flat = cp.mean(cp.array(flat[:,ind]),axis=0)
+    _tomo = (_tomo-_dark)/(_flat-_dark+1e-3)
+    _tomo[_tomo<=0] = 1
+    _tomo[:] = -cp.log(_tomo)
+    _tomo[cp.isnan(_tomo)] = 6.0
+    _tomo[cp.isinf(_tomo)] = 0
+    
     # Denoising
     # There's a critical reason to use different window sizes
     # between coarse and fine search.

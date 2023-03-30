@@ -24,10 +24,12 @@ theta = np.linspace(0,180,nproj,endpoint=False).astype('float32')
 result = np.zeros([nz,n,n],dtype=dtype)
 
 
+t = time.time()
 center_search_width = 100
 center_search_step = 0.5
-t = time.time()
-rotation_axis = find_center.find_center_vo(data[data.shape[0]//2],  
+center_search_ind = data.shape[0]//2
+rotation_axis = find_center.find_center_vo(data, dark, flat,
+                                           ind=center_search_ind,
                                            smin=-center_search_width, 
                                            smax=center_search_width, 
                                            step=center_search_step)
