@@ -90,7 +90,7 @@ def create_gl(N, Nproj, Ntheta, Nrho):
     thsp = (cp.arange(-Ntheta/2, Ntheta/2) *
             cp.float32(dtheta)).astype('float32')
     rhosp = (cp.arange(-Nrho, 0)*drho).astype('float32')
-    #erho = cp.tile(cp.exp(rhosp)[..., cp.newaxis], [1, Ntheta])
+    # erho = cp.tile(cp.exp(rhosp)[..., cp.newaxis], [1, Ntheta])
     # compensation for cubic interpolation
     B3th = splineB3(thsp, 1)
     B3th = cp.fft.fft(cp.fft.ifftshift(B3th))
@@ -137,7 +137,7 @@ def splineB3(x2, r):
         if d[id] < 1:  # use the first polynomial
             B3[id] = (3*d[id]**3-6*d[id]**2+4)/6
         else:
-            if(d[id] < 2):
+            if (d[id] < 2):
                 B3[id] = (-d[id]**3+6*d[id]**2-12*d[id]+8)/6
     B3f = x2*0
     B3f[int(cp.ceil((sizex+1)/2.0)-ri-1):int(cp.ceil((sizex+1)/2.0)+ri)] = B3
@@ -222,7 +222,7 @@ def create_adj(P):
         proj0[k] = P.proj[pids[k][0]]
         projl[k] = P.proj[pids[k][-1]]-P.proj[pids[k][0]]
 
-    #shift in angles
+    # shift in angles
     projp = (P.Nproj-1)/(proj0[P.Nspan-1]+projl[P.Nspan-1]-proj0[0])
 
     # adapt for interpolation
@@ -276,16 +276,9 @@ def fzeta_loop_weights_adj(Ntheta, Nrho, betas, rhos, a, osthlarge):
 
 
 class LpRec():
-    def __init__(self, n, nproj, nz, theta, dtype):
-        # ts = time.time()
-        # check angles
-        nproj_test = int(np.round(np.pi/(theta[1]-theta[0])))
-        if nproj != nproj_test:
-            print(
-                'lprec method works only with equally spaced angles in the interval [0,180) deg.')
-            exit(1)
+    def __init__(self, n, nproj, nz, dtype):
         ntheta = 2**int(cp.round(cp.log2(nproj)))
-        nrho = 2*2**int(cp.round(cp.log2(n)))        
+        nrho = 2*2**int(cp.round(cp.log2(n)))
         # precompute parameters for the lp method
         self.Pgl = create_gl(n, nproj, ntheta, nrho)
         self.Padj = create_adj(self.Pgl)
@@ -316,6 +309,7 @@ class LpRec():
                            C2lp1, C2lp2, lpids, wids, cids,
                            nlpids, nwids, ncids)
 
-    def backprojection(self, obj, data, stream):
-        data = cp.ascontiguousarray(data)  # ????
+    def backprojection(self, obj, data, theta, stream):
+        data = cp.ascontiguousarray(data)
+        # dont use theta, works only for [0,180) interval, equally spaced angles
         self.fslv.backprojection(obj.data.ptr, data.data.ptr, stream.ptr)

@@ -49,6 +49,7 @@ __copyright__ = "Copyright (c) 2023, UChicago Argonne, LLC."
 __docformat__ = 'restructuredtext en'
 __all__ = ['GPURecRAM', ]
 
+
 class GPURecRAM:
     '''
     Class for tomographic reconstruction on GPU with conveyor data processing by sinogram chunks (in z direction).
@@ -100,7 +101,6 @@ class GPURecRAM:
             dezinger_threshold=dezinger_threshold,
             fbp_filter=fbp_filter,
         )
-
 
     def __init__(
         self,
@@ -164,7 +164,7 @@ class GPURecRAM:
         """
         if (ncz % 2 != 0):
             raise ValueError("Chunk size must be a multiple of 2")
-        
+
         self.n = n
         self.nz = nz
         self.nproj = nproj
@@ -193,42 +193,52 @@ class GPURecRAM:
             dezinger_threshold=dezinger_threshold,
             fbp_filter=fbp_filter,
         )
-        
+
         # pinned memory for data item
         self.item_pinned = {}
-        self.item_pinned['data'] = utils.pinned_array(np.zeros([2, *self.shape_data_chunk], dtype=in_dtype))
-        self.item_pinned['dark'] = utils.pinned_array(np.zeros([2, *self.shape_dark_chunk], dtype=in_dtype))
-        self.item_pinned['flat'] = utils.pinned_array(np.ones([2, *self.shape_flat_chunk], dtype=in_dtype))
+        self.item_pinned['data'] = utils.pinned_array(
+            np.zeros([2, *self.shape_data_chunk], dtype=in_dtype))
+        self.item_pinned['dark'] = utils.pinned_array(
+            np.zeros([2, *self.shape_dark_chunk], dtype=in_dtype))
+        self.item_pinned['flat'] = utils.pinned_array(
+            np.ones([2, *self.shape_flat_chunk], dtype=in_dtype))
 
         # gpu memory for data item
         self.item_gpu = {}
-        self.item_gpu['data'] = cp.zeros([2, *self.shape_data_chunk], dtype=in_dtype)
-        self.item_gpu['dark'] = cp.zeros([2, *self.shape_dark_chunk], dtype=in_dtype)
-        self.item_gpu['flat'] = cp.ones([2, *self.shape_flat_chunk], dtype=in_dtype)
+        self.item_gpu['data'] = cp.zeros(
+            [2, *self.shape_data_chunk], dtype=in_dtype)
+        self.item_gpu['dark'] = cp.zeros(
+            [2, *self.shape_dark_chunk], dtype=in_dtype)
+        self.item_gpu['flat'] = cp.ones(
+            [2, *self.shape_flat_chunk], dtype=in_dtype)
 
         # pinned memory for reconstrution
-        self.rec_pinned = utils.pinned_array(np.zeros([16,*self.shape_recon_chunk], dtype=dtype))
+        self.rec_pinned = utils.pinned_array(
+            np.zeros([16, *self.shape_recon_chunk], dtype=dtype))
 
         # gpu memory for reconstrution
         self.rec_gpu = cp.zeros([2, *self.shape_recon_chunk], dtype=dtype)
-                
-        # chunks        
+
+        # chunks
         self.nzchunk = int(np.ceil(nz/ncz))
         self.lzchunk = np.minimum(
-            ncz, np.int32(nz-np.arange(self.nzchunk)*ncz))  # chunk sizes        
+            ncz, np.int32(nz-np.arange(self.nzchunk)*ncz))  # chunk sizes
         self.ncz = ncz
         self.nz = nz
-        
+
         # streams for overlapping data transfers with computations
         self.stream1 = cp.cuda.Stream(non_blocking=False)
         self.stream2 = cp.cuda.Stream(non_blocking=False)
         self.stream3 = cp.cuda.Stream(non_blocking=False)
-        
+
         # threads for filling the resulting array
         self.write_threads = []
-        for k in range(16):#16 is probably enough but can be changed
+        for k in range(16):  # 16 is probably enough but can be changed
             self.write_threads.append(utils.WRThread())
-        
+
+        self.cl_tomo_func = tomo_functions.TomoFunctions(
+            **self.tomofunc_kwargs)
+
     def recon_all(self, data, dark, flat, theta, output=None):
         """
         Perform correction and reconstruction.
@@ -254,16 +264,20 @@ class GPURecRAM:
         # Validate that the inputs match what was declared in __init__ and pre-allocated for.
         expected_data_shape = (self.nz, self.nproj, self.n)
         if data.shape != expected_data_shape:
-            raise ValueError(f"Expected data.shape {expected_data_shape}, got {data.shape}")
+            raise ValueError(
+                f"Expected data.shape {expected_data_shape}, got {data.shape}")
         expected_dark_shape = (self.ndark, self.nz, self.n)
         if dark.shape != expected_dark_shape:
-            raise ValueError(f"Expected dark.shape {expected_dark_shape}, got {dark.shape}")
+            raise ValueError(
+                f"Expected dark.shape {expected_dark_shape}, got {dark.shape}")
         expected_flat_shape = (self.nflat, self.nz, self.n)
         if flat.shape != expected_flat_shape:
-            raise ValueError(f"Expected flat.shape {expected_flat_shape}, got {flat.shape}")
+            raise ValueError(
+                f"Expected flat.shape {expected_flat_shape}, got {flat.shape}")
         expected_theta_shape = (self.nproj,)
         if theta.shape != expected_theta_shape:
-            raise ValueError(f"Expected theta.shape {expected_theta_shape}, got {theta.shape}")
+            raise ValueError(
+                f"Expected theta.shape {expected_theta_shape}, got {theta.shape}")
         if output is None:
             # Allocate output array.
             output = np.zeros([self.nz, self.n, self.n], dtype=self.dtype)
@@ -271,50 +285,59 @@ class GPURecRAM:
             # Use pre-allocated output array, first validating it.
             expected_output_shape = (self.nz, self.n, self.n)
             if output.shape != expected_output_shape:
-                raise ValueError(f"Expected output.shape {expected_output_shape}, got {output.shape}")
-                
-        self.cl_tomo_func = tomo_functions.TomoFunctions(theta=theta, **self.tomofunc_kwargs)
-        
+                raise ValueError(
+                    f"Expected output.shape {expected_output_shape}, got {output.shape}")
+
+        # set theta
+        theta = cp.array(theta)/180*np.pi
+
         # Pipeline for data cpu-gpu copy and reconstruction
         for k in range(self.nzchunk+2):
-            if k<self.nzchunk:
+            if k < self.nzchunk:
                 utils.printProgressBar(k, self.nzchunk, length=40)
-            if(k > 0 and k < self.nzchunk+1):
+            if (k > 0 and k < self.nzchunk+1):
                 with self.stream2:  # reconstruction
                     data_chunk = self.item_gpu['data'][(k-1) % 2]
                     dark_chunk = self.item_gpu['dark'][(k-1) % 2]
                     flat_chunk = self.item_gpu['flat'][(k-1) % 2]
-                    
-                    rec = self.rec_gpu[(k-1) % 2]                    
-                    self.cl_tomo_func.rec(rec, data_chunk, dark_chunk, flat_chunk)
-                    
-            if(k > 1):
+
+                    rec = self.rec_gpu[(k-1) % 2]
+                    self.cl_tomo_func.rec(
+                        rec, data_chunk, dark_chunk, flat_chunk, theta)
+
+            if (k > 1):
                 with self.stream3:  # gpu->cpu copy
                     # find free thread
                     ithread = utils.find_free_thread(self.write_threads)
-                    self.rec_gpu[(k-2) % 2].get(out=self.rec_pinned[ithread])                    
-                    
-            if(k < self.nzchunk):
+                    self.rec_gpu[(k-2) % 2].get(out=self.rec_pinned[ithread])
+
+            if (k < self.nzchunk):
                 # copy to pinned memory
-                self.item_pinned['data'][k % 2, :self.lzchunk[k]] = data[k*self.ncz:k*self.ncz+self.lzchunk[k]]
-                self.item_pinned['dark'][k % 2, :, :self.lzchunk[k]] = dark[:,k*self.ncz:k*self.ncz+self.lzchunk[k]]
-                self.item_pinned['flat'][k % 2, :, :self.lzchunk[k]] = flat[:,k*self.ncz:k*self.ncz+self.lzchunk[k]]
-                
-                
+                self.item_pinned['data'][k % 2, :self.lzchunk[k]
+                                         ] = data[k*self.ncz:k*self.ncz+self.lzchunk[k]]
+                self.item_pinned['dark'][k % 2, :, :self.lzchunk[k]
+                                         ] = dark[:, k*self.ncz:k*self.ncz+self.lzchunk[k]]
+                self.item_pinned['flat'][k % 2, :, :self.lzchunk[k]
+                                         ] = flat[:, k*self.ncz:k*self.ncz+self.lzchunk[k]]
+
                 with self.stream1:  # cpu->gpu copy
-                    self.item_gpu['data'][k % 2].set(self.item_pinned['data'][k % 2])
-                    self.item_gpu['dark'][k % 2].set(self.item_pinned['dark'][k % 2])
-                    self.item_gpu['flat'][k % 2].set(self.item_pinned['flat'][k % 2])
+                    self.item_gpu['data'][k % 2].set(
+                        self.item_pinned['data'][k % 2])
+                    self.item_gpu['dark'][k % 2].set(
+                        self.item_pinned['dark'][k % 2])
+                    self.item_gpu['flat'][k % 2].set(
+                        self.item_pinned['flat'][k % 2])
             self.stream3.synchronize()
-            if(k > 1): 
+            if (k > 1):
                 # run a thread filling the resulting array (after gpu->cpu copy is done)
                 st = (k-2)*self.ncz
                 end = st+self.lzchunk[k-2]
-                self.write_threads[ithread].run(utils.fill_array, (output, self.rec_pinned[ithread], st, end))
+                self.write_threads[ithread].run(
+                    utils.fill_array, (output, self.rec_pinned[ithread], st, end))
 
             self.stream1.synchronize()
             self.stream2.synchronize()
-            
+
         for t in self.write_threads:
             t.join()
-        return output 
+        return output

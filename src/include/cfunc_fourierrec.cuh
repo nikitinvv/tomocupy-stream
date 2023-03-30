@@ -30,9 +30,9 @@ public:
   size_t nproj; // number of angles
   size_t nz;    // number of slices
   size_t ne;
-  cfunc_fourierrec(size_t nproj, size_t nz, size_t n, size_t theta);
+  cfunc_fourierrec(size_t nproj, size_t nz, size_t n);
   ~cfunc_fourierrec();
-  void backprojection(size_t f, size_t g, size_t stream);  
+  void backprojection(size_t f, size_t g, size_t theta,  size_t stream);  
   void free();
 };
 

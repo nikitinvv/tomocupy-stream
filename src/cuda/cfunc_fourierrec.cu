@@ -1,7 +1,7 @@
 #include "cfunc_fourierrec.cuh"
 #include "kernels_fourierrec.cuh"
 
-cfunc_fourierrec::cfunc_fourierrec(size_t nproj, size_t nz, size_t n, size_t theta_)
+cfunc_fourierrec::cfunc_fourierrec(size_t nproj, size_t nz, size_t n)
     : nproj(nproj), nz(nz), n(n) {
     float eps = 1e-3;
     mu = -log(eps) / (2 * n * n);        
@@ -34,8 +34,7 @@ cfunc_fourierrec::cfunc_fourierrec(size_t nproj, size_t nz, size_t n, size_t the
         inembed, 1, idist, CUDA_C, 
         onembed, 1, odist, CUDA_C, 
         nproj*nz, &workSize, CUDA_C);                      
-    
-    theta = (float*)theta_;
+        
   }
 
 
@@ -53,9 +52,10 @@ void cfunc_fourierrec::free() {
   }
 }
 
-void cfunc_fourierrec::backprojection(size_t f_, size_t g_, size_t stream_) {
+void cfunc_fourierrec::backprojection(size_t f_, size_t g_, size_t theta_, size_t stream_) {
     real2* g = (real2 *)g_;    
     real2* f = (real2 *)f_;
+    theta = (float*)theta_;
     cudaStream_t stream = (cudaStream_t)stream_;    
     cufftSetStream(plan1d, stream);
     cufftSetStream(plan2d, stream);    

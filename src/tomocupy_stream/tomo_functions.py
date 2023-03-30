@@ -68,8 +68,7 @@ class TomoFunctions():
         ti_mask,
         dezinger,
         dezinger_threshold,
-        fbp_filter,
-        theta,
+        fbp_filter
     ):
         self.n = n
         self.nproj = nproj
@@ -86,55 +85,55 @@ class TomoFunctions():
         self.dezinger = dezinger
         self.dezinger_threshold = dezinger_threshold
         self.fbp_filter = fbp_filter
-        self.theta = theta
-        
+
         # padded size for filtering
         self.ne = 3*self.n//2
         if self.dtype == 'float16':
             # power of 2 for float16
             self.ne = 2**int(np.ceil(np.log2(3*self.n//2)))
-        
+
         # filter class
         self.cl_filter = fbp_filter_module.FBPFilter(
             self.ne, self.nproj, self.ncz, self.dtype)
-        theta = cp.array(theta)/180*cp.pi
+
         # backprojection class
         if self.reconstruction_algorithm == 'fourierrec':
             self.cl_rec = fourierrec.FourierRec(
-                self.n, self.nproj, self.ncz, theta, self.dtype)
+                self.n, self.nproj, self.ncz, self.dtype)
         elif self.reconstruction_algorithm == 'lprec':
             self.rotation_axis += 0.5
             self.cl_rec = lprec.LpRec(
-                self.n, self.nproj, self.ncz, theta, self.dtype)
+                self.n, self.nproj, self.ncz, self.dtype)
         elif self.reconstruction_algorithm == 'linerec':
             self.cl_rec = linerec.LineRec(
-                theta, self.nproj, self.nproj, self.ncz, self.ncz, self.n, self.dtype)
-    
-    def rec(self, result, data, dark, flat):
+                self.nproj, self.nproj, self.ncz, self.ncz, self.n, self.dtype)
+
+    def rec(self, result, data, dark, flat, theta):
         """Processing a sinogram data chunk"""
-        
+
         self._remove_outliers(data)
         self._remove_outliers(dark)
-        self._remove_outliers(flat)        
-        tmp = self._darkflat_correction(data, dark, flat) # new memory -> tmp
+        self._remove_outliers(flat)
+        tmp = self._darkflat_correction(data, dark, flat)  # new memory -> tmp
         if self.remove_stripe_method == 'fw':
             remove_stripe.remove_stripe_fw(
-                tmp, self.fw_sigma, self.fw_filter, self.fw_level)        
+                tmp, self.fw_sigma, self.fw_filter, self.fw_level)
         elif self.remove_stripe_method == 'ti':
             remove_stripe.remove_stripe_ti(
-                tmp, self.ti_beta,self.ti_mask)
-            
-        self._minus_log(tmp)        
-        self._fbp_filter_center(tmp)        
-        self.cl_rec.backprojection(result, tmp, cp.cuda.get_current_stream())        
-            
+                tmp, self.ti_beta, self.ti_mask)
+
+        self._minus_log(tmp)
+        self._fbp_filter_center(tmp)
+        self.cl_rec.backprojection(
+            result, tmp, theta, cp.cuda.get_current_stream())
+
     def _darkflat_correction(self, data, dark, flat):
         """Dark-flat field correction"""
 
         dark0 = dark.astype(self.dtype, copy=False)
         flat0 = flat.astype(self.dtype, copy=False)
-        flat0 = cp.mean(flat0,axis=0)[:,np.newaxis]
-        dark0 = cp.mean(dark0,axis=0)[:,np.newaxis]
+        flat0 = cp.mean(flat0, axis=0)[:, np.newaxis]
+        dark0 = cp.mean(dark0, axis=0)[:, np.newaxis]
         res = (data.astype(self.dtype, copy=False)-dark0) / (flat0-dark0+1e-3)
         res[res <= 0] = 1
         return res
@@ -144,22 +143,23 @@ class TomoFunctions():
 
         data[:] = -cp.log(data)
         data[cp.isnan(data)] = 6.0
-        data[cp.isinf(data)] = 0        
+        data[cp.isinf(data)] = 0
 
     def _remove_outliers(self, data):
         """Remove outliers"""
 
-        if(int(self.dezinger) > 0):
+        if (int(self.dezinger) > 0):
             w = int(self.dezinger)
             if len(data.shape) == 3:
                 fdata = ndimage.median_filter(data, [w, 1, w])
             else:
                 fdata = ndimage.median_filter(data, [w, w])
-            data[:]= cp.where(cp.logical_and(data > fdata, (data - fdata) > self.dezinger_threshold), fdata, data)        
+            data[:] = cp.where(cp.logical_and(
+                data > fdata, (data - fdata) > self.dezinger_threshold), fdata, data)
 
     def _fbp_filter_center(self, data):
         """FBP filtering of projections with applying the rotation center shift wrt to the origin"""
-        
+
         t = cp.fft.rfftfreq(self.ne).astype('float32')
         if self.fbp_filter == 'parzen':
             w = t * (1 - t * 2)**3
@@ -168,6 +168,7 @@ class TomoFunctions():
 
         tmp = cp.pad(
             data, ((0, 0), (0, 0), (self.ne//2-self.n//2, self.ne//2-self.n//2)), mode='edge')
-        w = w*cp.exp(-2*cp.pi*1j*t*(-self.rotation_axis + self.n/2))  # center fix
+        # center fix
+        w = w*cp.exp(-2*cp.pi*1j*t*(-self.rotation_axis + self.n/2))
         self.cl_filter.filter(tmp, w, cp.cuda.get_current_stream())
-        data[:] = tmp[:, :, self.ne//2-self.n//2:self.ne//2+self.n//2]        
+        data[:] = tmp[:, :, self.ne//2-self.n//2:self.ne//2+self.n//2]
