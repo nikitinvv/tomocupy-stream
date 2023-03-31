@@ -67,8 +67,8 @@ def find_center_vo(tomo, dark, flat, ind=None, smin=-50, smax=50, srad=6, step=0
 
 def _downsample(tomo, level):
     for k in range(level):
-        tomo = 0.5*(tomo[::2]+tomo[1::2])
-        tomo = 0.5*(tomo[:,::2]+tomo[:,1::2])
+        tomo = 0.5*(tomo[:-1:2]+tomo[1::2])
+        tomo = 0.5*(tomo[:,:-1:2]+tomo[:,1::2])
     return tomo        
     
 def _calculate_metric(shift_col, sino1, sino2, sino3, mask):
