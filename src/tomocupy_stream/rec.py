@@ -73,6 +73,10 @@ class GPURecRAM:
         fw_level=None,
         ti_beta=None,
         ti_mask=None,
+        vo_all_snr=None,
+        vo_all_la_size=None, 
+        vo_all_sm_size=None,
+        vo_all_dim=None,
         dezinger=0,
         dezinger_threshold=5000,
         fbp_filter="parzen",
@@ -97,6 +101,10 @@ class GPURecRAM:
             fw_level=fw_level,
             ti_beta=ti_beta,
             ti_mask=ti_mask,
+            vo_all_snr=vo_all_snr,
+            vo_all_la_size=vo_all_la_size, 
+            vo_all_sm_size=vo_all_sm_size,
+            vo_all_dim=vo_all_dim,
             dezinger=dezinger,
             dezinger_threshold=dezinger_threshold,
             fbp_filter=fbp_filter,
@@ -121,6 +129,10 @@ class GPURecRAM:
         fw_level=None,
         ti_beta=None,
         ti_mask=None,
+        vo_all_snr=None,
+        vo_all_la_size=None, 
+        vo_all_sm_size=None,
+        vo_all_dim=None,
         dezinger=0,
         dezinger_threshold=5000,
         fbp_filter="parzen",
@@ -144,7 +156,7 @@ class GPURecRAM:
             Output data type
         rotation_axis : float
         reconstruction_algorithm : {"fourierrec", "lprec", "linerec"}
-        remove_stripe_method : {"fw", "ti"}
+        remove_stripe_method : {"fw", "ti", "vo-all"}
         fw_sigma : float
             Only applicable if remove_stripe_method="fw"
         fw_filter :
@@ -155,6 +167,14 @@ class GPURecRAM:
             Only applicable if remove_stripe_method="ti"
         ti_mask : float
             Only applicable if remove_stripe_method="ti"
+        vo_snr  : float
+            Only applicable if remove_stripe_method="vo-all"
+        vo_la_size : int
+            Only applicable if remove_stripe_method="vo-all"
+        vo_sm_size : int
+            Only applicable if remove_stripe_method="vo-all"
+        vo_dim : {1, 2}, optional
+            Only applicable if remove_stripe_method="vo-all"
         dezinger : int
             0 means no zingers; 2 means remove zingers
         dezinger_threshold : float
@@ -163,8 +183,7 @@ class GPURecRAM:
 
         """
         if (ncz % 2 != 0):
-            raise ValueError("Chunk size must be a multiple of 2")
-
+            raise ValueError("Chunk size must be a multiple of 2")        
         self.n = n
         self.nz = nz
         self.nproj = nproj
@@ -189,6 +208,10 @@ class GPURecRAM:
             fw_level=fw_level,
             ti_beta=ti_beta,
             ti_mask=ti_mask,
+            vo_all_snr=vo_all_snr,
+            vo_all_la_size=vo_all_la_size, 
+            vo_all_sm_size=vo_all_sm_size,
+            vo_all_dim=vo_all_dim,
             dezinger=dezinger,
             dezinger_threshold=dezinger_threshold,
             fbp_filter=fbp_filter,

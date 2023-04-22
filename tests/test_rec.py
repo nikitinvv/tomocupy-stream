@@ -48,6 +48,11 @@ cl = GPURecRAM(
     # remove_stripe_method = 'ti',
     # ti_beta = 0.022,
     # ti_mask = 1.0,
+    # remove_stripe_method = 'vo-all',
+    # vo_all_snr=3,
+    # vo_all_la_size=61,
+    # vo_all_sm_size=21,
+    # vo_all_dim=1,
 
     fbp_filter='parzen',  # filter for fbp
     rotation_axis=rotation_axis,  # rotation center

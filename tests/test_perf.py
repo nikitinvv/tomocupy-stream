@@ -53,7 +53,6 @@ cl = GPURecRAM(
     # dezinger = 2, # removing Zingers
     # dezinger_threshold = 5000,
 
-    remove_stripe_method = 'None',
     # remove_stripe_method = 'fw',
     # fw_sigma = 1,
     # fw_level = 7,
@@ -62,6 +61,11 @@ cl = GPURecRAM(
     # remove_stripe_method = 'ti',
     # ti_beta = 0.022,
     # ti_mask = 1.0,
+    remove_stripe_method = 'vo-all',
+    vo_all_snr=3,
+    vo_all_la_size=61,
+    vo_all_sm_size=21,
+    vo_all_dim=1,
 
     fbp_filter = 'parzen',  # filter for fbp
     rotation_axis = rotation_axis, # rotation center
@@ -72,5 +76,5 @@ cl.recon_all(data, dark, flat, theta, output=result)
 print(f'Reconstruction time: {time.time()-t}s')
 
 # save recon
-# print(np.linalg.norm(result))
+print(np.linalg.norm(result))
 # tifffile.imwrite('data/result.tiff',result)    

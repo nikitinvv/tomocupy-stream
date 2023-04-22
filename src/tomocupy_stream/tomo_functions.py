@@ -66,6 +66,10 @@ class TomoFunctions():
         fw_level,
         ti_beta,
         ti_mask,
+        vo_all_snr,
+        vo_all_la_size, 
+        vo_all_sm_size,
+        vo_all_dim,
         dezinger,
         dezinger_threshold,
         fbp_filter
@@ -82,6 +86,10 @@ class TomoFunctions():
         self.fw_level = fw_level
         self.ti_beta = ti_beta
         self.ti_mask = ti_mask
+        self.vo_all_snr=vo_all_snr
+        self.vo_all_la_size=vo_all_la_size 
+        self.vo_all_sm_size=vo_all_sm_size
+        self.vo_all_dim=vo_all_dim
         self.dezinger = dezinger
         self.dezinger_threshold = dezinger_threshold
         self.fbp_filter = fbp_filter
@@ -121,7 +129,9 @@ class TomoFunctions():
         elif self.remove_stripe_method == 'ti':
             remove_stripe.remove_stripe_ti(
                 tmp, self.ti_beta, self.ti_mask)
-
+        elif self.remove_stripe_method == 'vo-all':
+            remove_stripe.remove_all_stripe(
+                tmp, self.vo_all_snr, self.vo_all_la_size, self.vo_all_sm_size, self.vo_all_dim)
         self._minus_log(tmp)
         self._fbp_filter_center(tmp)
         self.cl_rec.backprojection(
