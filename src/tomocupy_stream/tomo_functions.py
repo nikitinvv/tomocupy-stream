@@ -95,14 +95,19 @@ class TomoFunctions():
         self.fbp_filter = fbp_filter
 
         # padded size for filtering
-        self.ne = 3*self.n//2
+        self.ne = 4*self.n
+        
         if self.dtype == 'float16':
             # power of 2 for float16
-            self.ne = 2**int(np.ceil(np.log2(3*self.n//2)))
+            self.ne = 2**int(np.ceil(np.log2(self.ne)))
+
+        
 
         # filter class
         self.cl_filter = fbp_filter_module.FBPFilter(
             self.ne, self.nproj, self.ncz, self.dtype)
+
+        self.wfilter = self.cl_filter.calc_filter(self.fbp_filter)
 
         # backprojection class
         if self.reconstruction_algorithm == 'fourierrec':
@@ -170,15 +175,13 @@ class TomoFunctions():
     def _fbp_filter_center(self, data):
         """FBP filtering of projections with applying the rotation center shift wrt to the origin"""
 
-        t = cp.fft.rfftfreq(self.ne).astype('float32')
-        if self.fbp_filter == 'parzen':
-            w = t * (1 - t * 2)**3
-        elif self.fbp_filter == 'shepp':
-            w = t * cp.sinc(t)
-
         tmp = cp.pad(
             data, ((0, 0), (0, 0), (self.ne//2-self.n//2, self.ne//2-self.n//2)), mode='edge')
-        # center fix
-        w = w*cp.exp(-2*cp.pi*1j*t*(-self.rotation_axis + self.n/2))
+        t = cp.fft.rfftfreq(self.ne).astype('float32')
+        w = self.wfilter*cp.exp(-2*cp.pi*1j*t*(-self.rotation_axis + self.n/2))
+
+        # tmp = cp.fft.irfft(
+            # w*cp.fft.rfft(tmp, axis=2), axis=2).astype(self.args.dtype)  # note: filter works with complex64, however, it doesnt take much time
         self.cl_filter.filter(tmp, w, cp.cuda.get_current_stream())
         data[:] = tmp[:, :, self.ne//2-self.n//2:self.ne//2+self.n//2]
+
