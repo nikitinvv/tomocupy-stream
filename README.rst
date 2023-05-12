@@ -39,7 +39,7 @@ Install jupyter notebook
 
 ::
 
-  pip install jupiter
+  pip install jupyter
 
 ~~~~~~
 Install tomocupy-stream
