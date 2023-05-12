@@ -18,12 +18,25 @@ Install necessary packages
   conda create -n tomocupy -c conda-forge cupy scikit-build swig pywavelets numexpr opencv tifffile h5py cupy cudatoolkit=11.0 python=3.9
   
   conda activate tomocupy
-  
+
+~~~~~~
+Install pytorch for wavelet fitlering
+~~~~~~
+
+::
+
+
   pip install torch torchvision torchaudio
   
   git clone https://github.com/fbcotter/pytorch_wavelets
   
   cd pytorch_wavelets; pip install .; cd -  
+
+~~~~~~
+Install tomocupy-stream
+~~~~~~
+
+::
   
   git clone https://github.com/nikitinvv/tomocupy-stream
   
@@ -31,3 +44,32 @@ Install necessary packages
   
   pip install .
   
+================
+Tests
+================
+
+
+~~~~~~
+Demonstration of reconstruction and reprojection in juoyter notebook
+~~~~~~
+
+https://github.com/nikitinvv/tomocupy-stream/blob/main/tests/test_for_compression.ipynb
+
+~~~~~~
+Adjoint test
+~~~~~~
+tests/test_chip_adjoint.py
+
+~~~~~~
+Reconstruction from h5 file
+~~~~~~
+tests/test_rec.py
+
+~~~~~~
+Performance test
+~~~~~~
+tests/test_perf.py
+
+
+
+
