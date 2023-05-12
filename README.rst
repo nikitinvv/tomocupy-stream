@@ -20,7 +20,7 @@ Install necessary packages
   conda activate tomocupy
 
 ~~~~~~
-Install pytorch for wavelet fitlering
+Install pytorch for wavelet filtering
 ~~~~~~
 
 ::
@@ -31,6 +31,15 @@ Install pytorch for wavelet fitlering
   git clone https://github.com/fbcotter/pytorch_wavelets
   
   cd pytorch_wavelets; pip install .; cd -  
+
+
+~~~~~~
+Install jupyter notebook 
+~~~~~~
+
+::
+
+  pip install jupiter
 
 ~~~~~~
 Install tomocupy-stream
