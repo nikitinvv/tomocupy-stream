@@ -57,6 +57,17 @@ class FourierRec():
             self.fslv = cfunc_fourierrec.cfunc_fourierrec(
                 nproj, nz//2, n)
 
+    def projection(self, data, obj, theta, stream):
+        # reorganize data as a complex array, reuse data
+        obj = cp.ascontiguousarray(cp.concatenate(
+            (obj[:self.nz//2, :, :, cp.newaxis], obj[self.nz//2:, :, :, cp.newaxis]), axis=3).reshape(obj.shape))
+        # reuse obj array
+        datac = cp.ascontiguousarray(
+            data.reshape(self.nz//2, self.nproj, 2*self.n))
+        self.fslv.projection(
+            data.data.ptr, obj.data.ptr, theta.data.ptr, stream.ptr)
+        data[:] = cp.concatenate((datac[:, :, ::2], datac[:, :, 1::2]))
+
     def backprojection(self, obj, data, theta, stream):
         # reorganize data as a complex array, reuse data
         data = cp.ascontiguousarray(cp.concatenate(

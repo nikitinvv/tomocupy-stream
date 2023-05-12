@@ -78,16 +78,52 @@ void cfunc_fourierrec::backprojection(size_t f_, size_t g_, size_t theta_, size_
     ifftshiftc <<<GS3d3, dimBlock, 0, stream>>> (g, n, nproj, nz);    
     mulc <<<GS3d3, dimBlock, 0, stream>>> (g, 4/(float)n, n, nproj, nz);
     
-    gather <<<GS3d3, dimBlock, 0, stream>>> (g, fde, x, y, m, mu, n, nproj, nz);    
+    gather <<<GS3d3, dimBlock, 0, stream>>> (g, fde, x, y, m, mu, n, nproj, nz, 0);    
     
-    wrap <<<GS3d2, dimBlock, 0, stream>>> (fde, n, nz, m);
+    wrap <<<GS3d2, dimBlock, 0, stream>>> (fde, n, nz, m, 0);
     
     fftshiftc <<<GS3d2, dimBlock, 0, stream>>> (fde, 2 * n + 2 * m, nz);
     cufftXtExec(plan2d, &fde[m + m * (2 * n + 2 * m)],
                &fde[m + m * (2 * n + 2 * m)], CUFFT_INVERSE);
     fftshiftc <<<GS3d2, dimBlock, 0, stream>>> (fde, 2 * n + 2 * m, nz);
     
-    divphi <<<GS3d0, dimBlock, 0, stream>>> (fde, f, mu, n, nz, nproj, m);        
+    divphi <<<GS3d0, dimBlock, 0, stream>>> (fde, f, mu, n, nz, nproj, m, 0);        
     circ <<<GS3d0, dimBlock, 0, stream>>> (f, 0, n, nz);  
+}
 
+
+void cfunc_fourierrec::projection(size_t g_, size_t f_, size_t theta_, size_t stream_) {
+  real2* g = (real2 *)g_;    
+  real2* f = (real2 *)f_;
+  theta = (float*)theta_;
+  cudaStream_t stream = (cudaStream_t)stream_;    
+  cufftSetStream(plan1d, stream);
+  cufftSetStream(plan2d, stream);    
+
+  // set thread block, grid sizes will be computed before cuda kernel execution
+  dim3 dimBlock(32,32,1);    
+  dim3 GS2d0,GS3d0,GS3d1,GS3d2,GS3d3;  
+  GS2d0 = dim3(ceil(n / 32.0), ceil(nproj / 32.0));
+  GS3d0 = dim3(ceil(n / 32.0), ceil(n / 32.0),nz);
+  GS3d1 = dim3(ceil(2 * n / 32.0), ceil(2 * n / 32.0),nz);
+  GS3d2 = dim3(ceil((2 * n + 2 * m) / 32.0),ceil((2 * n + 2 * m) / 32.0), nz);
+  GS3d3 = dim3(ceil(n / 32.0), ceil(nproj / 32.0),nz);
+ 
+  
+  cudaMemsetAsync(fde, 0, (2 * n + 2 * m) * (2 * n + 2 * m) * nz * sizeof(real2),stream);  
+  
+  takexy <<<GS2d0, dimBlock, 0, stream>>> (x, y, theta, n, nproj);        
+  circ <<<GS3d0, dimBlock, 0, stream>>> (f, 0, n, nz);  
+  divphi <<<GS3d0, dimBlock, 0, stream>>> (fde, f, mu, n, nz, nproj, m, 1);        
+  fftshiftc <<<GS3d2, dimBlock, 0, stream>>> (fde, 2 * n + 2 * m, nz);
+  cufftXtExec(plan2d, &fde[m + m * (2 * n + 2 * m)],
+             &fde[m + m * (2 * n + 2 * m)], CUFFT_FORWARD);
+  fftshiftc <<<GS3d2, dimBlock, 0, stream>>> (fde, 2 * n + 2 * m, nz);
+  wrap <<<GS3d2, dimBlock, 0, stream>>> (fde, n, nz, m, 1);
+  gather <<<GS3d3, dimBlock, 0, stream>>> (g, fde, x, y, m, mu, n, nproj, nz, 1);    
+  mulc <<<GS3d3, dimBlock, 0, stream>>> (g, 4/(float)n, n, nproj, nz);
+
+  ifftshiftc <<<GS3d3, dimBlock, 0, stream>>> (g, n, nproj, nz);
+  cufftXtExec(plan1d, g, g, CUFFT_INVERSE);
+  ifftshiftc <<<GS3d3, dimBlock, 0, stream>>> (g, n, nproj, nz);      
 }

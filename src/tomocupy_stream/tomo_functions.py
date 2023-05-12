@@ -67,12 +67,13 @@ class TomoFunctions():
         ti_beta,
         ti_mask,
         vo_all_snr,
-        vo_all_la_size, 
+        vo_all_la_size,
         vo_all_sm_size,
         vo_all_dim,
         dezinger,
         dezinger_threshold,
-        fbp_filter
+        fbp_filter,
+        minus_log
     ):
         self.n = n
         self.nproj = nproj
@@ -86,22 +87,21 @@ class TomoFunctions():
         self.fw_level = fw_level
         self.ti_beta = ti_beta
         self.ti_mask = ti_mask
-        self.vo_all_snr=vo_all_snr
-        self.vo_all_la_size=vo_all_la_size 
-        self.vo_all_sm_size=vo_all_sm_size
-        self.vo_all_dim=vo_all_dim
+        self.vo_all_snr = vo_all_snr
+        self.vo_all_la_size = vo_all_la_size
+        self.vo_all_sm_size = vo_all_sm_size
+        self.vo_all_dim = vo_all_dim
         self.dezinger = dezinger
         self.dezinger_threshold = dezinger_threshold
         self.fbp_filter = fbp_filter
+        self.minus_log = minus_log
 
         # padded size for filtering
         self.ne = 4*self.n
-        
+
         if self.dtype == 'float16':
             # power of 2 for float16
             self.ne = 2**int(np.ceil(np.log2(self.ne)))
-
-        
 
         # filter class
         self.cl_filter = fbp_filter_module.FBPFilter(
@@ -149,14 +149,14 @@ class TomoFunctions():
         flat0 = flat.astype(self.dtype, copy=False)
         flat0 = cp.mean(flat0, axis=0)[:, np.newaxis]
         dark0 = cp.mean(dark0, axis=0)[:, np.newaxis]
-        res = (data.astype(self.dtype, copy=False)-dark0) / (flat0-dark0+1e-3)
-        res[res <= 0] = 1
+        res = (data.astype(self.dtype, copy=False)-dark0) / (flat0-dark0+1e-6)
         return res
 
     def _minus_log(self, data):
         """Taking negative logarithm"""
-
-        data[:] = -cp.log(data)
+        if self.minus_log:
+            data[data <= 0] = 1
+            data[:] = -cp.log(data)
         data[cp.isnan(data)] = 6.0
         data[cp.isinf(data)] = 0
 
@@ -179,9 +179,27 @@ class TomoFunctions():
             data, ((0, 0), (0, 0), (self.ne//2-self.n//2, self.ne//2-self.n//2)), mode='edge')
         t = cp.fft.rfftfreq(self.ne).astype('float32')
         w = self.wfilter*cp.exp(-2*cp.pi*1j*t*(-self.rotation_axis + self.n/2))
-
         # tmp = cp.fft.irfft(
-            # w*cp.fft.rfft(tmp, axis=2), axis=2).astype(self.args.dtype)  # note: filter works with complex64, however, it doesnt take much time
+        # w*cp.fft.rfft(tmp, axis=2), axis=2).astype(self.args.dtype)  # note: filter works with complex64, however, it doesnt take much time
+        # print(w.shape,tmp.shape,tmp.dtype,w.dtype)
         self.cl_filter.filter(tmp, w, cp.cuda.get_current_stream())
         data[:] = tmp[:, :, self.ne//2-self.n//2:self.ne//2+self.n//2]
 
+    def _filter_center(self, data):
+        """FBP filtering of projections with applying the rotation center shift wrt to the origin"""
+
+        tmp = cp.pad(
+            data, ((0, 0), (0, 0), (self.ne//2-self.n//2, self.ne//2-self.n//2)), mode='edge')
+        t = cp.fft.rfftfreq(self.ne).astype('float32')
+        # w = self.ne*0.5*cp.exp(2*cp.pi*1j*t*(-self.rotation_axis + self.n/2))
+        w = 0.5*self.ne*cp.exp(2*cp.pi*1j*t*(-self.rotation_axis + self.n/2))
+
+        # tmp = cp.fft.irfft(
+        # w*cp.fft.rfft(tmp, axis=2), axis=2).astype(self.args.dtype)  # note: filter works with complex64, however, it doesnt take much time
+        self.cl_filter.filter(tmp, w, cp.cuda.get_current_stream())
+        data[:] = tmp[:, :, self.ne//2-self.n//2:self.ne//2+self.n//2]
+
+    def projection(self, data, obj, theta):
+        self.cl_rec.projection(
+            data, obj, theta, cp.cuda.get_current_stream())
+        data = self._filter_center(data)

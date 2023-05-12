@@ -74,12 +74,13 @@ class GPURecRAM:
         ti_beta=None,
         ti_mask=None,
         vo_all_snr=None,
-        vo_all_la_size=None, 
+        vo_all_la_size=None,
         vo_all_sm_size=None,
         vo_all_dim=None,
         dezinger=0,
         dezinger_threshold=5000,
         fbp_filter="parzen",
+        minus_log=True
     ):
         """
         Construct a GPURecRAM instance from sample data.
@@ -102,12 +103,13 @@ class GPURecRAM:
             ti_beta=ti_beta,
             ti_mask=ti_mask,
             vo_all_snr=vo_all_snr,
-            vo_all_la_size=vo_all_la_size, 
+            vo_all_la_size=vo_all_la_size,
             vo_all_sm_size=vo_all_sm_size,
             vo_all_dim=vo_all_dim,
             dezinger=dezinger,
             dezinger_threshold=dezinger_threshold,
             fbp_filter=fbp_filter,
+            minus_log=minus_log
         )
 
     def __init__(
@@ -130,12 +132,13 @@ class GPURecRAM:
         ti_beta=None,
         ti_mask=None,
         vo_all_snr=None,
-        vo_all_la_size=None, 
+        vo_all_la_size=None,
         vo_all_sm_size=None,
         vo_all_dim=None,
         dezinger=0,
         dezinger_threshold=5000,
         fbp_filter="parzen",
+        minus_log=True
     ):
         """
         n : int
@@ -180,10 +183,12 @@ class GPURecRAM:
         dezinger_threshold : float
         fbp_filter :
             Default is "parzen"
+        minus_log :
+            Default is "False"
 
         """
         if (ncz % 2 != 0):
-            raise ValueError("Chunk size must be a multiple of 2")        
+            raise ValueError("Chunk size must be a multiple of 2")
         self.n = n
         self.nz = nz
         self.nproj = nproj
@@ -209,12 +214,13 @@ class GPURecRAM:
             ti_beta=ti_beta,
             ti_mask=ti_mask,
             vo_all_snr=vo_all_snr,
-            vo_all_la_size=vo_all_la_size, 
+            vo_all_la_size=vo_all_la_size,
             vo_all_sm_size=vo_all_sm_size,
             vo_all_dim=vo_all_dim,
             dezinger=dezinger,
             dezinger_threshold=dezinger_threshold,
             fbp_filter=fbp_filter,
+            minus_log=minus_log
         )
 
         # pinned memory for data item
@@ -364,3 +370,24 @@ class GPURecRAM:
         for t in self.write_threads:
             t.join()
         return output
+
+    def proj_all(self, obj, theta):
+        """
+        Forward projection operator
+        """
+        data = np.zeros([self.nz, self.nproj, self.n], dtype=self.dtype)
+        # set theta
+        theta = cp.array(theta)/180*np.pi
+
+        obj_gpu = cp.zeros(self.shape_recon_chunk, dtype=self.dtype)
+        data_gpu = cp.zeros(self.shape_data_chunk, dtype=self.dtype)
+        # Pipeline for data cpu-gpu copy and reconstruction
+        for k in range(self.nzchunk):
+            utils.printProgressBar(k, self.nzchunk, length=40)
+            obj_gpu[:self.lzchunk[k]] = cp.array(
+                obj[k*self.ncz:k*self.ncz+self.lzchunk[k]])
+            self.cl_tomo_func.projection(data_gpu, obj_gpu, theta)
+            data[k*self.ncz:k*self.ncz+self.lzchunk[k]
+                 ] = data_gpu[:self.lzchunk[k]].get()
+
+        return data

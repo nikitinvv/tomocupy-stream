@@ -56,6 +56,7 @@ cl = GPURecRAM(
 
     fbp_filter='parzen',  # filter for fbp
     rotation_axis=rotation_axis,  # rotation center
+    minus_log=True
 )
 
 # run recon
