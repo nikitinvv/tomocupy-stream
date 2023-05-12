@@ -50,7 +50,7 @@ Tests
 
 
 ~~~~~~
-Demonstration of reconstruction and reprojection in juoyter notebook
+Demonstration of reconstruction and reprojection in jupyter notebook
 ~~~~~~
 
 https://github.com/nikitinvv/tomocupy-stream/blob/main/tests/test_for_compression.ipynb
