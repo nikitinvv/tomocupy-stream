@@ -8,6 +8,11 @@ Tomocupy_stream
 ================
 Installation
 ================
+
+~~~~~~
+Install necessary packages
+~~~~~~
+
 ::
 
   conda create -n tomocupy -c conda-forge cupy scikit-build swig pywavelets numexpr opencv tifffile h5py cupy cudatoolkit=11.0 python=3.9
@@ -18,9 +23,7 @@ Installation
   
   git clone https://github.com/fbcotter/pytorch_wavelets
   
-  cd pytorch_wavelets
-  
-  pip install .
+  cd pytorch_wavelets; pip install .; cd -  
   
   git clone https://github.com/nikitinvv/tomocupy-stream
   
