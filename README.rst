@@ -53,7 +53,7 @@ https://github.com/nikitinvv/tomocupy-stream/blob/main/tests/test_for_compressio
 ~~~~~~
 Adjoint test
 ~~~~~~
-tests/test_chip_adjoint.py
+tests/test_adjoint.py
 
 ~~~~~~
 Reconstruction from h5 file
