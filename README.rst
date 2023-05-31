@@ -15,23 +15,9 @@ Install necessary packages
 
 ::
 
-  conda create -n tomocupy -c conda-forge cupy scikit-build swig pywavelets numexpr opencv tifffile h5py cupy cudatoolkit=11.0 python=3.9
+  conda create -n tomocupy -c conda-forge cupy scikit-build swig pywavelets numexpr opencv tifffile h5py cupy dxchange
   
   conda activate tomocupy
-
-~~~~~~
-Install pytorch for wavelet filtering
-~~~~~~
-
-::
-
-
-  pip install torch torchvision torchaudio
-  
-  git clone https://github.com/fbcotter/pytorch_wavelets
-  
-  cd pytorch_wavelets; pip install .; cd -  
-
 
 ~~~~~~
 Install jupyter notebook 
