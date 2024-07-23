@@ -268,7 +268,7 @@ class GPURecRAM:
         self.cl_tomo_func = tomo_functions.TomoFunctions(
             **self.tomofunc_kwargs)
 
-    def recon_all(self, data, dark, flat, theta, output=None):
+    def recon_all(self, data, dark, flat, theta, output=None, progress=True):
         """
         Perform correction and reconstruction.
 
@@ -322,7 +322,7 @@ class GPURecRAM:
 
         # Pipeline for data cpu-gpu copy and reconstruction
         for k in range(self.nzchunk+2):
-            if k < self.nzchunk:
+            if k < self.nzchunk and progress:
                 utils.printProgressBar(k, self.nzchunk, length=40)
             if (k > 0 and k < self.nzchunk+1):
                 with self.stream2:  # reconstruction
