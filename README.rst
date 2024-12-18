@@ -15,7 +15,7 @@ Install necessary packages
 
 ::
 
-  conda create -n tomocupy -c conda-forge cupy scikit-build swig pywavelets numexpr opencv tifffile h5py cupy dxchange cmake scikit-build
+  conda create -n tomocupy -c conda-forge cupy scikit-build swig pywavelets numexpr opencv tifffile h5py cupy dxchange cmake scikit-build matplotlib
   
   conda activate tomocupy
 
