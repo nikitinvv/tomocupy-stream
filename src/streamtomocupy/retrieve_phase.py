@@ -1,7 +1,8 @@
 """Paganin phase retrieval implementation"""
 
+from functools import lru_cache
+
 import cupy as cp
-from cupy.fft import fft2, ifft2
 
 __all__ = [
     "paganin_filter",
@@ -57,40 +58,70 @@ def paganin_filter(
     ndarray
         Approximated 3D tomographic phase data.
     """
-    # New dimensions and pad value after padding.
+    # New dimensions after padding.
     py, pz = _calc_pad(data, pixel_size, dist, energy, pad)
 
-    # Compute the reciprocal grid.
     dx, dy, dz = data.shape
-    if method == "paganin":
-        w2 = _reciprocal_grid(pixel_size, dy + 2 * py, dz + 2 * pz)
-        phase_filter = cp.fft.fftshift(_paganin_filter_factor(energy, dist, alpha, w2))
-    elif method == "Gpaganin":
-        kf = _reciprocal_gridG(pixel_size, dy + 2 * py, dz + 2 * pz)
-        phase_filter = cp.fft.fftshift(
-            _paganin_filter_factorG(energy, dist, kf, pixel_size, db, W)
-        )
-
-    prj = cp.empty([dy + 2 * py, dz + 2 * pz], dtype=data.dtype)
-    
-    _retrieve_phase(data, phase_filter, py, pz, prj, pad)
+    phase_filter = _phase_filter(
+        method, dy + 2 * py, dz + 2 * pz, pixel_size, dist, energy, alpha, db, W
+    )
+    _retrieve_phase(data, phase_filter, py, pz)
 
     return data
 
 
-def _retrieve_phase(data, phase_filter, px, py, prj, pad):
+def _phase_filter(method, ny, nx, pixel_size, dist, energy, alpha, db, W):
+    return _phase_filter_dev(
+        method, ny, nx, pixel_size, dist, energy, alpha, db, W,
+        cp.cuda.runtime.getDevice(),
+    )
+
+
+@lru_cache(maxsize=8)
+def _phase_filter_dev(method, ny, nx, pixel_size, dist, energy, alpha, db, W, device):
+    """Normalized filter in rfft2 layout, i.e. with the last axis halved.
+
+    Cached: the geometry is the same for every chunk.
+    """
+    if method == "Gpaganin":
+        kf = _reciprocal_gridG(pixel_size, ny, nx)
+        pf = _paganin_filter_factorG(energy, dist, kf, pixel_size, db, W)
+    else:
+        w2 = _reciprocal_grid(pixel_size, ny, nx)
+        pf = _paganin_filter_factor(energy, dist, alpha, w2)
+    pf = cp.fft.fftshift(pf)
+    pf /= pf.max()
+    # the grid is even, so the dropped half of the spectrum is redundant
+    return cp.ascontiguousarray(pf[:, : nx // 2 + 1])
+
+
+# cap on the spectrum held at once; batching small projections hides launch
+# overhead, at full detector size one already saturates the bandwidth
+_BATCH_BYTES = 32 * 1024**2
+
+
+def _retrieve_phase(data, phase_filter, px, py):
+    """Edge-pad each projection, apply the filter, write it back in place."""
     dx, dy, dz = data.shape
-    num_jobs = data.shape[0]
-    normalized_phase_filter = phase_filter / phase_filter.max()    
-    
-    for m in range(num_jobs):        
-        prj[:] = cp.pad(data[m],((px,px),(py,py)),mode='edge')
-        fproj = fft2(prj)
-        fproj *= normalized_phase_filter
-        proj = cp.real(ifft2(fproj))
-        if pad:
-            proj = proj[px : dy + px, py : dz + py]
-        data[m] = proj
+    ny, nx = dy + 2 * px, dz + 2 * py
+    nb = max(1, min(dx, _BATCH_BYTES // (ny * (nx // 2 + 1) * 8)))
+    prj = cp.empty((nb, ny, nx), dtype="float32")
+
+    for m in range(0, dx, nb):
+        k = min(nb, dx - m)
+        buf = prj[:k]
+        buf[:, px : dy + px, py : dz + py] = data[m : m + k]
+        # replicate edges; keepdims slices stay correct when px or py is 0
+        if px:
+            buf[:, :px] = buf[:, px : px + 1]
+            buf[:, dy + px :] = buf[:, dy + px - 1 : dy + px]
+        if py:
+            buf[:, :, :py] = buf[:, :, py : py + 1]
+            buf[:, :, dz + py :] = buf[:, :, dz + py - 1 : dz + py]
+        fprj = cp.fft.rfft2(buf, axes=(1, 2))
+        fprj *= phase_filter
+        proj = cp.fft.irfft2(fprj, (ny, nx), axes=(1, 2))
+        data[m : m + k] = proj[:, px : dy + px, py : dz + py]
 
 
 def _calc_pad(data, pixel_size, dist, energy, pad):
@@ -116,8 +147,6 @@ def _calc_pad(data, pixel_size, dist, energy, pad):
         Pad amount in projection axis.
     int
         Pad amount in sinogram axis.
-    float
-        Pad value.
     """
     dx, dy, dz = data.shape
     wavelength = _wavelength(energy)

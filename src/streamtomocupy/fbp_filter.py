@@ -13,9 +13,8 @@ class FBPFilter:
         self.n = n
 
     def filter(self, data, w, stream):
-        # reorganize data as a complex array, reuse data
+        # w is prepared once by Rec, already viewed as float and in data.dtype
         data = cp.ascontiguousarray(data)
-        w = cp.ascontiguousarray(w.view("float32").astype(data.dtype))
         self.fslv.filter(data.data.ptr, w.data.ptr, stream.ptr)
 
     def calc_filter(self, filter):

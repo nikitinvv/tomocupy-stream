@@ -1,18 +1,16 @@
-from pkg_resources import get_distribution, DistributionNotFound
+from importlib.metadata import version, PackageNotFoundError
 
 __version__ = "0.0.1"
 
 try:
-    __version__ = get_distribution(__name__).version
-except DistributionNotFound:
-    # package is not installed
+    __version__ = version(__name__)
+except PackageNotFoundError:
     pass
 
 from streamtomocupy.config import *
 from streamtomocupy.rec import *
 from streamtomocupy.streamrecon import *
 from streamtomocupy.utils import *
-from streamtomocupy.config import *
 from streamtomocupy.proc import *
 
 from streamtomocupy.fourierrec import *

@@ -36,6 +36,21 @@ class Rec:
         self.ni = ni
         self.args = args
 
+        # the filter and the padded buffer are the same for every chunk
+        with cp.cuda.Device(0):
+            center, _ = self.center_fix()
+            t = cp.fft.rfftfreq(ne).astype("float32")
+            t *= -center + n / 2
+            w = (self.wfilter[0] * cp.exp(-2 * cp.pi * 1j * t)).astype("complex64")
+            w = cp.ascontiguousarray(cp.tile(w, [ncz, 1, 1]))
+            w = cp.ascontiguousarray(w.view("float32").astype(args.dtype))
+        self.w = [None] * ngpus
+        self.tmp = [None] * ngpus
+        for igpu in range(ngpus):
+            with cp.cuda.Device(igpu):
+                self.w[igpu] = cp.asarray(w)
+                self.tmp[igpu] = cp.empty([ncz, nproj, ne], dtype=args.dtype)
+
     def backprojection(self, res, data, theta):
         """Backprojection"""
         igpu = data.device.id
@@ -79,17 +94,13 @@ class Rec:
         """FBP filtering of projections with applying the rotation center shift wrt to the origin"""
         igpu = data.device.id
         stream = cp.cuda.get_current_stream()
-        tmp = cp.pad(
-            data,
-            ((0, 0), (0, 0), (self.ne // 2 - self.n // 2, self.ne // 2 - self.n // 2)),
-            mode="edge",
-        )
-        t = cp.fft.rfftfreq(self.ne).astype("float32")
-        center, _ = self.center_fix()
-        # shift = cp.tile(cp.float32(-center + self.n / 2), [data.shape[0], 1, 1])
-        t *= (-center + self.n / 2)
-        w = cp.tile(self.wfilter[igpu] * cp.exp(-2 * cp.pi * 1j * t),[data.shape[0], 1, 1])
-        self.cl_filter[igpu].filter(tmp, w, stream)
-        data[:] = tmp[:, :, self.ne // 2 - self.n // 2 : self.ne // 2 + self.n // 2]
+        pad = self.ne // 2 - self.n // 2
+        tmp = self.tmp[igpu]
+        # pad with edge values, as cp.pad(mode="edge") did
+        tmp[:, :, pad : pad + self.n] = data
+        tmp[:, :, :pad] = data[:, :, :1]
+        tmp[:, :, pad + self.n :] = data[:, :, -1:]
+        self.cl_filter[igpu].filter(tmp, self.w[igpu], stream)
+        data[:] = tmp[:, :, pad : pad + self.n]
 
         return data  # reuse input memory

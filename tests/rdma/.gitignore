@@ -1,0 +1,5 @@
+librdma.*.so
+server.log
+rec_slice.npy
+rec_slice.png
+__pycache__/
