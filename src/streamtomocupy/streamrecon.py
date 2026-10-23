@@ -1,6 +1,5 @@
 import cupy as cp
 import numpy as np
-import sys
 
 from streamtomocupy import rec
 from streamtomocupy import proc
@@ -87,7 +86,7 @@ class StreamRecon:
             self.cl_proc.remove_outliers(data)
             self.cl_proc.remove_outliers(dark)
             self.cl_proc.remove_outliers(flat)
-            res[:] = self.cl_proc.darkflat_correction(data, dark, flat)
+            self.cl_proc.darkflat_correction(data, dark, flat, out=res)
             self.cl_proc.remove_stripe(res)
 
         return _proc_sino(self, res, data, dark, flat)

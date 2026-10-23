@@ -1,11 +1,9 @@
 import cupy as cp
 import numpy as np
 import os
-from .utils import *
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import wait
 
-cp.cuda.set_pinned_memory_allocator(cp.cuda.PinnedMemoryPool().malloc)
 
 class Chunking:
     def __init__(self, nbytes, ngpus):
@@ -263,7 +261,9 @@ class Chunking:
                     pinned[j].append(np.frombuffer(pinned_mem + offset, a.dtype, n).reshape(shape0))
                     gpu[j].append(cp.ndarray(shape0, dtype=a.dtype, memptr=gpu_mem + offset))
                 except Exception as e:
-                    raise RuntimeError(f"Failed to allocate pinned/gpu buffers") from e
+                    raise RuntimeError(
+                        f"Failed to allocate pinned/gpu buffers of {nbytes} bytes"
+                    ) from e
 
                 offset += nbytes
 

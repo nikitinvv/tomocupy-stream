@@ -1,6 +1,8 @@
 #include "cfunc_fourierrec.cuh"
 #include "kernels_fourierrec.cuh"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 cfunc_fourierrec::cfunc_fourierrec(size_t nproj, size_t nz, size_t n)
     : nproj(nproj), nz(nz), n(n) {
@@ -34,8 +36,130 @@ cfunc_fourierrec::cfunc_fourierrec(size_t nproj, size_t nz, size_t n)
         1, ffts, 
         inembed, 1, idist, CUDA_C, 
         onembed, 1, odist, CUDA_C, 
-        nproj*nz, &workSize, CUDA_C);                      
+        nproj*nz, &workSize, CUDA_C);
+
+    cudaMallocHost((void **)&theta_host, nproj * sizeof(float));
+    theta_cached = new float[nproj];
   }
+
+
+// Which samples reach which tile of the padded spectrum, for scatter_binned.
+// A sample is listed under each of the <=4 tiles its stencil touches;
+// tiles over `subsize` samples are split into several subproblems.
+void cfunc_fourierrec::build_bins(size_t nproj0, cudaStream_t stream) {
+  free_bins();
+
+  const size_t s = 2 * n + 2 * m;
+  if ((size_t)tile_b < 2 * m + 1)
+    tile_b = 2 * m + 1;
+  ntx = (int)((s + tile_b - 1) / tile_b);
+  const int ntile = ntx * ntx;
+
+  dim3 dimBlock(32, 32, 1);
+  dim3 GS2d0(ceil(n / 32.0), ceil(nproj0 / 32.0));
+
+  int *counts;
+  cudaMalloc((void **)&counts, (ntile + 1) * sizeof(int));
+  cudaMemsetAsync(counts, 0, (ntile + 1) * sizeof(int), stream);
+  count_tiles <<<GS2d0, dimBlock, 0, stream>>> (counts, x, y, m, n, nproj0,
+                                                tile_b, ntx);
+
+  int *hcounts = new int[ntile];
+  cudaMemcpyAsync(hcounts, counts, ntile * sizeof(int), cudaMemcpyDeviceToHost,
+                  stream);
+  cudaStreamSynchronize(stream);
+
+  int *hoffsets = new int[ntile + 1];
+  hoffsets[0] = 0;
+  for (int i = 0; i < ntile; i++)
+    hoffsets[i + 1] = hoffsets[i] + hcounts[i];
+  const int total = hoffsets[ntile];
+
+  int *offsets;
+  cudaMalloc((void **)&offsets, (ntile + 1) * sizeof(int));
+  cudaMemcpyAsync(offsets, hoffsets, (ntile + 1) * sizeof(int),
+                  cudaMemcpyHostToDevice, stream);
+  cudaMemsetAsync(counts, 0, ntile * sizeof(int), stream);  // reuse as cursor
+  cudaMalloc((void **)&bin_samples, (size_t)total * sizeof(int));
+  fill_tiles <<<GS2d0, dimBlock, 0, stream>>> (bin_samples, counts, offsets, x,
+                                               y, m, n, nproj0, tile_b, ntx);
+  cudaStreamSynchronize(stream);
+  cudaFree(counts);
+  cudaFree(offsets);
+
+  // empty tiles get no subproblem; fde is already zeroed
+  nsub = 0;
+  nscratch = 0;
+  for (int i = 0; i < ntile; i++) {
+    const int k = (hcounts[i] + subsize - 1) / subsize;
+    nsub += k;
+    if (k > 1)
+      nscratch++;
+  }
+
+  int *htile = new int[nsub];
+  int *hbeg = new int[nsub];
+  int *hend = new int[nsub];
+  int *hslot = new int[nsub];
+  int *hfin = new int[nscratch > 0 ? nscratch : 1];
+  for (int i = 0, p = 0, q = 0; i < ntile; i++) {
+    const int k = (hcounts[i] + subsize - 1) / subsize;
+    if (k > 1)
+      hfin[q] = i;
+    for (int j = 0; j < k; j++, p++) {
+      const int e = hoffsets[i] + (j + 1) * subsize;
+      htile[p] = i;
+      hbeg[p] = hoffsets[i] + j * subsize;
+      hend[p] = e < hoffsets[i + 1] ? e : hoffsets[i + 1];
+      hslot[p] = k > 1 ? q : -1;
+    }
+    if (k > 1)
+      q++;
+  }
+
+  cudaMalloc((void **)&sub_tile, nsub * sizeof(int));
+  cudaMalloc((void **)&sub_beg, nsub * sizeof(int));
+  cudaMalloc((void **)&sub_end, nsub * sizeof(int));
+  cudaMalloc((void **)&sub_scratch, nsub * sizeof(int));
+  cudaMemcpyAsync(sub_tile, htile, nsub * sizeof(int), cudaMemcpyHostToDevice, stream);
+  cudaMemcpyAsync(sub_beg, hbeg, nsub * sizeof(int), cudaMemcpyHostToDevice, stream);
+  cudaMemcpyAsync(sub_end, hend, nsub * sizeof(int), cudaMemcpyHostToDevice, stream);
+  cudaMemcpyAsync(sub_scratch, hslot, nsub * sizeof(int), cudaMemcpyHostToDevice, stream);
+
+#ifdef HALF
+  // only the half build needs the float32 landing ground
+  if (nscratch > 0) {
+    scratch_bytes = (size_t)nscratch * nz * tile_b * tile_b * sizeof(float2);
+    cudaMalloc((void **)&fin_tile, nscratch * sizeof(int));
+    cudaMemcpyAsync(fin_tile, hfin, nscratch * sizeof(int), cudaMemcpyHostToDevice, stream);
+    cudaMalloc((void **)&scratch, scratch_bytes);
+  }
+#endif
+  cudaStreamSynchronize(stream);
+
+  delete[] htile;
+  delete[] hbeg;
+  delete[] hend;
+  delete[] hslot;
+  delete[] hfin;
+  delete[] hcounts;
+  delete[] hoffsets;
+
+  shmem = 2 * (size_t)tile_b * (tile_b + 1) * sizeof(float);
+}
+
+void cfunc_fourierrec::free_bins() {
+  cudaFree(bin_samples); bin_samples = nullptr;
+  cudaFree(sub_tile);    sub_tile = nullptr;
+  cudaFree(sub_beg);     sub_beg = nullptr;
+  cudaFree(sub_end);     sub_end = nullptr;
+  cudaFree(sub_scratch); sub_scratch = nullptr;
+  cudaFree(fin_tile);    fin_tile = nullptr;
+  cudaFree(scratch);     scratch = nullptr;
+  scratch_bytes = 0;
+  nsub = 0;
+  nscratch = 0;
+}
 
 
 // destructor, memory deallocation
@@ -46,9 +170,12 @@ void cfunc_fourierrec::free() {
     cudaFree(fde);
     cudaFree(x);
     cudaFree(y);
+    free_bins();
+    cudaFreeHost(theta_host); theta_host = nullptr;
+    delete[] theta_cached;    theta_cached = nullptr;
     cufftDestroy(plan2d);
     cufftDestroy(plan1d);
-    is_free = true;   
+    is_free = true;
   }
 }
 
@@ -78,9 +205,27 @@ void cfunc_fourierrec::backprojection(size_t f_, size_t g_, size_t theta_, size_
     cufftXtExec(plan1d, g, g, CUFFT_FORWARD);
     ifftshiftc <<<GS3d3, dimBlock, 0, stream>>> (g, n, nproj0, nz);    
     mulc <<<GS3d3, dimBlock, 0, stream>>> (g, 4/(float)n, n, nproj0, nz);
-    
-    gather <<<GS3d3, dimBlock, 0, stream>>> (g, fde, x, y, m, mu, n, nproj0, nz);    
-    
+
+    // the index depends on theta only, so it survives across chunks
+    cudaMemcpyAsync(theta_host, theta, nproj0 * sizeof(float),
+                    cudaMemcpyDeviceToHost, stream);
+    cudaStreamSynchronize(stream);
+    if (nproj0 != nproj_cached ||
+        memcmp(theta_host, theta_cached, nproj0 * sizeof(float)) != 0) {
+      build_bins(nproj0, stream);
+      memcpy(theta_cached, theta_host, nproj0 * sizeof(float));
+      nproj_cached = nproj0;
+    }
+
+    if (scratch)
+      cudaMemsetAsync(scratch, 0, scratch_bytes, stream);
+    scatter_binned <<<dim3(nsub, nz), SCATTER_CH, shmem, stream>>> (
+        fde, g, x, y, bin_samples, sub_tile, sub_beg, sub_end, sub_scratch,
+        scratch, m, mu, n, nproj0, nz, tile_b, ntx, 2 * n + 2 * m);
+    if (scratch)
+      finalize_tiles <<<dim3(nscratch, nz), SCATTER_CH, 0, stream>>> (
+          fde, scratch, fin_tile, nz, tile_b, ntx, 2 * n + 2 * m);
+
     wrap <<<GS3d2, dimBlock, 0, stream>>> (fde, n, nz, m);
     
     fftshiftc <<<GS3d2, dimBlock, 0, stream>>> (fde, 2 * n + 2 * m, nz);

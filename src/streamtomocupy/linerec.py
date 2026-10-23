@@ -19,9 +19,9 @@ class LineRec:
         else:
             self.fslv = cfunc_linerec.cfunc_linerec(nproj, nz, n, ncproj, ncz)
 
-    def backprojection(self, f, data, theta=[], stream=0, lamino_angle=0, sz=0):
-        # may be used for lamino in future..
-        phi = cp.pi / 2 + (lamino_angle) / 180 * cp.pi
+    def backprojection(self, f, data, theta, stream, lamino_angle=0, sz=0):
+        # lamino_angle/sz may be used for lamino in future..
+        phi = cp.pi / 2 + lamino_angle / 180 * cp.pi
         self.fslv.backprojection(
             f.data.ptr, data.data.ptr, theta.data.ptr, phi, sz, stream.ptr
         )

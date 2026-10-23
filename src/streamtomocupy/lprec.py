@@ -136,7 +136,8 @@ def create_adj(P):
     const = (
         (P.N + 1) * (P.N - 1) / P.N**2 / 2 / np.sqrt(2) * np.pi / 6 * 0.86 * 4
     )  # to understand where this is coming from
-    fZ = fZ * const
+    # const is float64, so cast back: the kernel reads fZ as pairs of float32
+    fZ = (fZ * const).astype("complex64")
 
     # (C2lp1,C2lp2), transformed Cartesian to log-polar coordinates
     [x1, x2] = cp.meshgrid(
@@ -278,9 +279,13 @@ def fzeta_loop_weights_adj(Ntheta, Nrho, betas, rhos, a, osthlarge):
     # fast fftshift multiplier
     s = 1 - 2 * (cp.arange(1, Nthetalarge + 1) % 2)
     h *= s
-    for j in range(len(krho)):
-        fcosa = pow(cp.cos(thsplarge), (2 * cp.pi * 1j * krho[j] / rhos - a))
-        fZ[j, :] = s * cp.fft.fft(h * fcosa)
+    # batched over krho, one row at a time is Nrho tiny FFT launches.
+    # the cap keeps the complex128 temporaries off the memory peak.
+    cosa = cp.cos(thsplarge)
+    nb = max(1, 2**22 // Nthetalarge)
+    for j in range(0, len(krho), nb):
+        e = (2 * cp.pi * 1j * krho[j : j + nb] / rhos - a)[:, cp.newaxis]
+        fZ[j : j + nb] = s * cp.fft.fft(h * cosa**e, axis=1)
     fZ = fZ[:, Nthetalarge // 2 - Ntheta // 2 : Nthetalarge // 2 + Ntheta // 2] * (
         thsplarge[1] - thsplarge[0]
     )
@@ -308,7 +313,7 @@ class LpRec:
         lp2p2w = self.Padj.lp2p2w.data.ptr
         C2lp1 = self.Padj.C2lp1.data.ptr
         C2lp2 = self.Padj.C2lp2.data.ptr
-        self.Padj.fZ = self.Padj.fZ.view("float32").astype(dtype)
+        self.Padj.fZ = self.Padj.fZ.astype("complex64").view("float32").astype(dtype)
         fZptr = self.Padj.fZ.data.ptr
         lpids = self.Padj.lpids.data.ptr
         wids = self.Padj.wids.data.ptr
